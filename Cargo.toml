@@ -1,0 +1,2 @@
+[workspace]
+members = ["./gateway", "./gateway_decode", "./gateway_protocol"]
