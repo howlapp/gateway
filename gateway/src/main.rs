@@ -1,18 +1,23 @@
+use std::net::SocketAddr;
 use std::{env, error::Error, sync::Arc, time::Duration};
 
 use furink_proto::version::{spawn_heartbeat_task, validate_and_register, HeartbeatConfig};
-use log::info;
 
 use furink_proto::discovery::{
     discovery_service_client::DiscoveryServiceClient, RegisterRequest, ServiceKind,
 };
 use tokio::sync::RwLock;
 use tonic::transport::Endpoint;
+use tracing::info;
+use warp::ws::{WebSocket, Ws};
 use warp::Filter;
 
 use crate::context::Context;
 
 mod context;
+
+#[tracing::instrument]
+async fn handle_connection(socket: WebSocket, context: Arc<Context>) {}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -51,6 +56,7 @@ Authors: {}
     });
     // create the context
     let context = Context {
+        clients: RwLock::new(Vec::new()),
         discovery_client: RwLock::new(DiscoveryServiceClient::new(channel.clone())),
     };
     // make the context thread-safe
@@ -58,8 +64,19 @@ Authors: {}
     // setup context filters
     let warp_ctx = warp::any().map(move || context.clone());
     let log = warp::log("gateway");
-    // create the graphql filter
-    // listen
+    // create the gateway filter
+    let gateway = warp::path::end()
+        .and(warp::ws())
+        .and(warp_ctx)
+        .map(|ws: Ws, ctx| ws.on_upgrade(move |socket| handle_connection(socket, ctx)))
+        .with(log);
+    // parse server addr
+    let url: SocketAddr = env::var("SERVICE_URL")
+        .expect("SERVICE_URL")
+        .parse()
+        .expect("failed to parse SERVICE_URL");
+	// start the server
     info!("Listening on http://127.0.0.1:8080");
+    warp::serve(gateway).try_bind(url).await;
     Ok(())
 }

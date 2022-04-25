@@ -1,16 +1,16 @@
 //! Defines the shared context between REST and GraphQL services.
-
-use std::sync::Arc;
-
 use furink_proto::discovery::discovery_service_client::DiscoveryServiceClient;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc::UnboundedSender, RwLock};
 use tonic::transport::Channel;
 use warp::ws::Message;
 
 /// A client connected to the gateway.
+#[derive(Debug)]
 pub struct Client {
+    /// Whether or not this client has identified.
     pub has_identified: bool,
-    pub connection: (mpsc::UnboundedSender<Message>),
+    /// Write-only channel that can send data to the connected client.
+    pub connection: UnboundedSender<Message>,
 }
 
 /// The root-level context. All references to this context must be
@@ -20,7 +20,6 @@ pub struct Client {
 pub struct Context {
     /// The service discovery client used for fetching available services.
     pub discovery_client: RwLock<DiscoveryServiceClient<Channel>>,
+    /// A map of clients connected to the gateway.
+    pub clients: RwLock<Vec<RwLock<Client>>>,
 }
-
-/// Thread-save immutable context.
-pub type ThreadContext = Arc<Context>;
